@@ -23,25 +23,26 @@ def conectar_planilha():
     ]
     creds = Credentials.from_service_account_info(creds_dict, scopes=escopos)
     client = gspread.authorize(creds)
-    return client.open("srs_pre_escolar").sheet1  # CRIE ESTA PLANILHA NO DRIVE!
+    # CONECTA DIRETAMENTE À PLANILHA DE CONTROLE DE TOKENS
+    return client.open("Controle_Tokens").sheet1 
 
 try:
     planilha = conectar_planilha()
 except Exception as e:
-    st.error(f"Erro de conexão com a planilha: {e}")
+    st.error(f"Erro de conexão com a planilha de controle: {e}")
     st.stop()
 # =============================================================
 
-def enviar_email_resultados(dados_crianca, dados_respondente, resultados_brutos):
-    assunto = f"Resultados SRS-2 (Pré-Escolar) - Criança: {dados_crianca['nome']}"
+def enviar_email_resultados(dados_crianca, dados_respondente, resultados_brutos, token):
+    assunto = f"Resultados SRS-2 (Pré-Escolar) - Paciente: {dados_crianca['nome']}"
     
     corpo = f"Avaliação SRS-2 (Formulário Pré-Escolar) concluída.\n\n"
-    corpo += f"=== DADOS DA CRIANÇA ===\n"
+    corpo += f"=== DADOS DO(A) PACIENTE ===\n"
     corpo += f"Nome: {dados_crianca['nome']}\n"
-    corpo += f"CPF (Login): {dados_crianca['cpf']}\n"
-    corpo += f"Data de Nascimento: {dados_crianca['data_nasc']}\n\n"
+    corpo += f"Data de Nascimento: {dados_crianca['data_nasc']}\n"
+    corpo += f"Token de Validação: {token}\n\n"
     
-    corpo += f"=== DADOS DO RESPONDENTE ===\n"
+    corpo += f"=== DADOS DO(A) RESPONDENTE ===\n\n"
     corpo += f"Nome: {dados_respondente['nome']}\n"
     corpo += f"Vínculo de Parentesco: {dados_respondente['vinculo']}\n\n"
     
@@ -64,12 +65,10 @@ def enviar_email_resultados(dados_crianca, dados_respondente, resultados_brutos)
         server.send_message(msg)
         server.quit()
         return True
-    except Exception as e:
+    except:
         return False
 
-# =============================================================
-# 1. PERGUNTAS DO TESTE
-# =============================================================
+# ================= QUESTIONÁRIO =================
 perguntas = [
     "Parece muito mais inquieta em situações sociais do que quando está sozinha.",
     "As expressões em seu rosto não combinam com o que está dizendo.",
@@ -145,95 +144,99 @@ opcoes_respostas = {
     "4 = Quase sempre é verdade": 4
 }
 
-# 2. Interface Visual
 st.set_page_config(page_title="SRS-2 Formulário Pré-Escolar", layout="centered")
 
-if "logado" not in st.session_state:
-    st.session_state.logado = False
-if "cpf_crianca" not in st.session_state:
-    st.session_state.cpf_crianca = ""
+# CSS para Botão Azul Forçado
+st.markdown("""
+    <style>
+    div[data-testid="stFormSubmitButton"] > button {
+        background-color: #0047AB !important;
+        color: white !important;
+        border: none !important;
+        padding: 0.6rem 2.5rem !important;
+        border-radius: 8px !important;
+        font-weight: bold !important;
+        font-size: 16px !important;
+    }
+    div[data-testid="stFormSubmitButton"] > button:hover {
+        background-color: #003380 !important;
+        color: white !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 if "avaliacao_concluida" not in st.session_state:
     st.session_state.avaliacao_concluida = False
 
-st.title("Clínica de Psicologia e Psicanálise Bruna Ligoski")
+# Título Centralizado
+st.markdown("<h1 style='text-align: center;'>Clínica de Psicologia e Psicanálise Bruna Ligoski</h1>", unsafe_allow_html=True)
 
-# ================= TELA DE LOGIN =================
-if not st.session_state.logado:
-    st.write("Bem-vindo(a) à Avaliação SRS-2 (Formulário Pré-Escolar).")
+if st.session_state.avaliacao_concluida:
+    st.success("Avaliação concluída e enviada com sucesso! Muito obrigado(a) pela sua colaboração.")
+    st.stop()
+
+# ================= VALIDAÇÃO SILENCIOSA DO TOKEN =================
+parametros = st.query_params
+token_url = parametros.get("token", None)
+
+if not token_url:
+    st.warning("⚠️ Link de acesso inválido. Solicite um novo link à profissional.")
+    st.stop()
+
+try:
+    registros = planilha.get_all_records()
+    dados_token = None
+    linha_alvo = 2 
+    for i, reg in enumerate(registros):
+        if str(reg.get("Token")) == token_url:
+            dados_token = reg
+            linha_alvo += i
+            break
+            
+    if not dados_token or dados_token.get("Status") != "Aberto":
+        st.error("⚠️ Este link é inválido ou já foi utilizado.")
+        st.stop()
+except Exception:
+    st.error("Erro técnico na validação do link.")
+    st.stop()
+
+# ================= INTERFACE DO TESTE =================
+linha_fina = "<hr style='margin-top: 8px; margin-bottom: 8px;'/>"
+st.markdown(linha_fina, unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center;'>Escala de Responsividade Social (SRS-2) - Pré-Escolar</h3>", unsafe_allow_html=True)
+st.markdown(linha_fina, unsafe_allow_html=True)
+
+st.info("**Instruções:** Em cada questão, por favor selecione a alternativa que melhor descreva o comportamento do(a) paciente nos últimos 6 meses.")
+
+with st.form("form_srs2"):
+    st.subheader("Dados do(a) Paciente")
+    nome_crianca = st.text_input("Nome completo do(a) paciente *")
+    data_nasc_crianca = st.date_input("Data de nascimento do(a) paciente *", format="DD/MM/YYYY", min_value=datetime.date(1900, 1, 1), max_value=datetime.date.today(), value=None)
     
-    with st.form("form_login"):
-        cpf_input = st.text_input("CPF da Criança (Login de Acesso - Apenas números)")
-        senha_input = st.text_input("Senha de Acesso", type="password")
-        botao_entrar = st.form_submit_button("Acessar Avaliação")
-        
-        if botao_entrar:
-            if not cpf_input:
-                st.error("Por favor, preencha o CPF.")
-            elif senha_input != st.secrets["SENHA_MESTRA"]:
-                st.error("Senha incorreta.")
-            else:
-                try:
-                    cpfs_registrados = planilha.col_values(1)
-                except:
-                    cpfs_registrados = []
-                    
-                if cpfs_registrados.count(cpf_input) >= 4:
-                    st.error("Acesso bloqueado. Este CPF já atingiu o limite máximo de 4 avaliações cadastradas.")
-                else:
-                    st.session_state.logado = True
-                    st.session_state.cpf_crianca = cpf_input
-                    st.session_state.avaliacao_concluida = False
-                    st.rerun()
-
-# ================= TELA FINAL =================
-elif st.session_state.avaliacao_concluida:
-    st.success("Avaliação concluída e enviada com sucesso! Muito obrigado pela sua colaboração.")
-
-# ================= QUESTIONÁRIO =================
-else:
-    st.write("### Escala de Responsividade Social (SRS-2) - Formulário Pré-Escolar")
-    st.info("**Instruções:** Em cada questão, por favor selecione a alternativa que melhor descreva o comportamento da criança nos últimos 6 meses.")
+    st.divider()
+    st.subheader("Dados do(a) Respondente")
+    nome_respondente = st.text_input("Nome completo do(a) respondente *")
+    vinculo_respondente = st.text_input("Vínculo / Parentesco (Ex: Pai, Mãe, Avó) *")
     st.divider()
 
-    with st.form("formulario_avaliacao"):
-        st.subheader("Dados da Criança")
-        nome_crianca = st.text_input("Nome da criança *")
-        cpf_form = st.text_input("CPF da criança *", value=st.session_state.cpf_crianca, disabled=True)
-        data_nasc_crianca = st.date_input("Data de nascimento *", format="DD/MM/YYYY", min_value=datetime.date(2015, 1, 1), max_value=datetime.date.today())
-        
-        st.divider()
-        st.subheader("Dados do Respondente")
-        nome_respondente = st.text_input("Nome completo do respondente *")
-        vinculo_respondente = st.text_input("Vínculo / Parentesco (Ex: Pai, Mãe, Avó) *")
+    respostas_coletadas = {}
+    for index, texto_pergunta in enumerate(perguntas):
+        num_q = index + 1
+        st.write(f"**{num_q}. {texto_pergunta}**")
+        resposta = st.radio(f"Oculto {num_q}", list(opcoes_respostas.keys()), index=None, label_visibility="collapsed")
+        respostas_coletadas[num_q] = opcoes_respostas[resposta] if resposta else None
         st.divider()
 
-        respostas_coletadas = {}
-
-        for index, texto_pergunta in enumerate(perguntas):
-            num_q = index + 1
-            st.write(f"**{num_q}. {texto_pergunta}**")
-            resposta = st.radio(f"Oculto {num_q}", list(opcoes_respostas.keys()), index=None, label_visibility="collapsed", key=f"q_{num_q}")
-
-            if resposta is not None:
-                respostas_coletadas[num_q] = opcoes_respostas[resposta]
-            else:
-                respostas_coletadas[num_q] = None
-            st.write("---")
-
-        botao_enviar = st.form_submit_button("Finalizar Avaliação")
-
-    # 3. Processamento e Envio
-    if botao_enviar:
+    if st.form_submit_button("Enviar Avaliação"):
         questoes_em_branco = [q for q, r in respostas_coletadas.items() if r is None]
 
-        if not nome_crianca or not nome_respondente or not vinculo_respondente:
-            st.error("Por favor, preencha todos os dados de identificação obrigatórios.")
+        if not nome_crianca or not nome_respondente or not vinculo_respondente or data_nasc_crianca is None:
+            st.error("Por favor, preencha todos os dados de identificação.")
         elif questoes_em_branco:
-            st.error(f"Por favor, responda todas as perguntas. Falta responder {len(questoes_em_branco)} questão(ões).")
+            st.error(f"Por favor, responda todas as perguntas. Faltam {len(questoes_em_branco)} questão(ões).")
         else:
-            dados_crianca = {
+            dados_paciente = {
                 "nome": nome_crianca,
-                "cpf": st.session_state.cpf_crianca,
                 "data_nasc": data_nasc_crianca.strftime("%d/%m/%Y")
             }
             dados_respondente = {
@@ -241,15 +244,14 @@ else:
                 "vinculo": vinculo_respondente
             }
 
-            with st.spinner('Processando os resultados e enviando e-mail...'):
-                sucesso = enviar_email_resultados(dados_crianca, dados_respondente, respostas_coletadas)
-                
-                if sucesso:
+            with st.spinner('Enviando avaliação...'):
+                if enviar_email_resultados(dados_paciente, dados_respondente, respostas_coletadas, token_url):
                     try:
-                        planilha.append_row([st.session_state.cpf_crianca])
+                        planilha.update_cell(linha_alvo, 5, "Respondido")
+                        st.session_state.avaliacao_concluida = True
+                        st.rerun()
                     except:
-                        pass
-                    st.session_state.avaliacao_concluida = True
-                    st.rerun()
+                        st.session_state.avaliacao_concluida = True
+                        st.rerun()
                 else:
-                    st.error("Houve um erro no envio. Avise a profissional responsável.")
+                    st.error("Houve um erro no envio. Tente novamente.")
