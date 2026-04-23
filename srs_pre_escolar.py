@@ -6,12 +6,46 @@ import json
 import gspread
 from google.oauth2.service_account import Credentials
 import datetime
+import base64 # <-- IMPORTAÇÃO NECESSÁRIA
+
+# ================= BLOCO 1: MARCA D'ÁGUA (SOLUÇÃO NATIVA E INFALÍVEL) =================
+def inject_watermark(nome_paciente, id_sessao):
+    paciente_display = nome_paciente if nome_paciente else "PACIENTE NÃO IDENTIFICADO"
+    token_display = id_sessao if id_sessao else "TOKEN"
+    
+    # Criamos o desenho da marca d'água em SVG
+    svg = f"""
+    <svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">
+        <g transform="translate(150,150) rotate(-45)">
+            <text text-anchor="middle" fill="rgba(150, 150, 150, 0.18)" font-size="20" font-family="Arial, sans-serif" font-weight="bold">
+                <tspan x="0" dy="-25">INSTRUMENTO SIGILOSO</tspan>
+                <tspan x="0" dy="25">{paciente_display}</tspan>
+                <tspan x="0" dy="25">{token_display}</tspan>
+            </text>
+        </g>
+    </svg>
+    """
+    
+    # Transformamos o desenho em uma linha de código Base64
+    b64_svg = base64.b64encode(svg.encode('utf-8')).decode('utf-8')
+    
+    # Aplicamos como Background do contêiner mestre do Streamlit
+    watermark_style = f"""
+    <style>
+    [data-testid="stAppViewContainer"] {{
+        background-image: url("data:image/svg+xml;base64,{b64_svg}") !important;
+        background-repeat: repeat !important;
+        background-position: center !important;
+        background-attachment: fixed !important;
+    }}
+    </style>
+    """
+    st.markdown(watermark_style, unsafe_allow_html=True)
 
 # ================= CONFIGURAÇÕES DE E-MAIL =================
 SEU_EMAIL = st.secrets["EMAIL_USUARIO"]
 SENHA_DO_EMAIL = st.secrets["SENHA_USUARIO"]
 EMAIL_DESTINO = "psicologabrunaligoski@gmail.com"
-# ===========================================================
 
 # ================= CONEXÃO COM GOOGLE SHEETS =================
 @st.cache_resource
@@ -23,7 +57,6 @@ def conectar_planilha():
     ]
     creds = Credentials.from_service_account_info(creds_dict, scopes=escopos)
     client = gspread.authorize(creds)
-    # CONECTA DIRETAMENTE À PLANILHA DE CONTROLE DE TOKENS
     return client.open("Controle_Tokens").sheet1 
 
 try:
@@ -31,24 +64,14 @@ try:
 except Exception as e:
     st.error(f"Erro de conexão com a planilha de controle: {e}")
     st.stop()
-# =============================================================
 
-def enviar_email_resultados(dados_crianca, dados_respondente, resultados_brutos, token):
-    assunto = f"Resultados SRS-2 (Pré-Escolar) - Paciente: {dados_crianca['nome']}"
+def enviar_email_resultados(dados_paciente, dados_respondente, resultados_brutos, token):
+    assunto = f"Resultados SRS-2 (Pré-Escolar) - Paciente: {dados_paciente['nome']}"
     
     corpo = f"Avaliação SRS-2 (Formulário Pré-Escolar) concluída.\n\n"
-    corpo += f"=== DADOS DO(A) PACIENTE ===\n"
-    corpo += f"Nome: {dados_crianca['nome']}\n"
-    corpo += f"Data de Nascimento: {dados_crianca['data_nasc']}\n"
-    corpo += f"Token de Validação: {token}\n\n"
-    
-    corpo += f"=== DADOS DO(A) RESPONDENTE ===\n\n"
-    corpo += f"Nome: {dados_respondente['nome']}\n"
-    corpo += f"Vínculo de Parentesco: {dados_respondente['vinculo']}\n\n"
-    
-    corpo += "================ GABARITO DE RESPOSTAS ================\n"
-    corpo += "Formato: [Número da Questão] - [Valor da Resposta]\n\n"
-    
+    corpo += f"=== DADOS DO(A) PACIENTE ===\nNome: {dados_paciente['nome']}\nData de Nascimento: {dados_paciente['data_nasc']}\nToken: {token}\n\n"
+    corpo += f"=== DADOS DO(A) RESPONDENTE ===\nNome: {dados_respondente['nome']}\nVínculo: {dados_respondente['vinculo']}\n\n"
+    corpo += "================ GABARITO DE RESPOSTAS ================\n\n"
     for num_q, valor in resultados_brutos.items():
         corpo += f"{num_q} - {valor}\n"
 
@@ -68,7 +91,7 @@ def enviar_email_resultados(dados_crianca, dados_respondente, resultados_brutos,
     except:
         return False
 
-# ================= QUESTIONÁRIO =================
+# Perguntas
 perguntas = [
     "Parece muito mais inquieta em situações sociais do que quando está sozinha.",
     "As expressões em seu rosto não combinam com o que está dizendo.",
@@ -146,21 +169,13 @@ opcoes_respostas = {
 
 st.set_page_config(page_title="SRS-2 Formulário Pré-Escolar", layout="centered")
 
-# CSS para Botão Azul Forçado
+# CSS do Botão
 st.markdown("""
     <style>
     div[data-testid="stFormSubmitButton"] > button {
-        background-color: #0047AB !important;
-        color: white !important;
-        border: none !important;
-        padding: 0.6rem 2.5rem !important;
-        border-radius: 8px !important;
-        font-weight: bold !important;
-        font-size: 16px !important;
-    }
-    div[data-testid="stFormSubmitButton"] > button:hover {
-        background-color: #003380 !important;
-        color: white !important;
+        background-color: #0047AB !important; color: white !important;
+        border: none !important; padding: 0.6rem 2.5rem !important;
+        border-radius: 8px !important; font-weight: bold !important; font-size: 16px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -168,19 +183,19 @@ st.markdown("""
 if "avaliacao_concluida" not in st.session_state:
     st.session_state.avaliacao_concluida = False
 
-# Título Centralizado
 st.markdown("<h1 style='text-align: center;'>Clínica de Psicologia e Psicanálise Bruna Ligoski</h1>", unsafe_allow_html=True)
 
 if st.session_state.avaliacao_concluida:
-    st.success("Avaliação concluída e enviada com sucesso! Muito obrigado(a) pela sua colaboração.")
+    st.success("Avaliação concluída e enviada com sucesso!")
     st.stop()
 
-# ================= VALIDAÇÃO SILENCIOSA DO TOKEN =================
+# ================= VALIDAÇÃO E SMART LINK =================
 parametros = st.query_params
 token_url = parametros.get("token", None)
+nome_na_url = parametros.get("nome", "") 
 
 if not token_url:
-    st.warning("⚠️ Link de acesso inválido. Solicite um novo link à profissional.")
+    st.warning("⚠️ Link de acesso inválido.")
     st.stop()
 
 try:
@@ -192,7 +207,6 @@ try:
             dados_token = reg
             linha_alvo += i
             break
-            
     if not dados_token or dados_token.get("Status") != "Aberto":
         st.error("⚠️ Este link é inválido ou já foi utilizado.")
         st.stop()
@@ -200,25 +214,24 @@ except Exception:
     st.error("Erro técnico na validação do link.")
     st.stop()
 
-# ================= INTERFACE DO TESTE =================
-linha_fina = "<hr style='margin-top: 8px; margin-bottom: 8px;'/>"
-st.markdown(linha_fina, unsafe_allow_html=True)
-st.markdown("<h3 style='text-align: center;'>Escala de Responsividade Social (SRS-2) - Pré-Escolar</h3>", unsafe_allow_html=True)
-st.markdown(linha_fina, unsafe_allow_html=True)
+# ================= INTERFACE =================
+st.markdown("<h3 style='text-align: center;'>Escala SRS-2 - Pré-Escolar</h3>", unsafe_allow_html=True)
 
-st.info("**Instruções:** Em cada questão, por favor selecione a alternativa que melhor descreva o comportamento do(a) paciente nos últimos 6 meses.")
+# IDENTIFICAÇÃO FORA DO FORM (Para a marca d'água funcionar em tempo real)
+st.subheader("Dados do(a) Paciente")
+nome_crianca = st.text_input("Nome completo do(a) paciente *", value=nome_na_url)
+data_nasc_crianca = st.date_input("Data de nascimento do(a) paciente *", format="DD/MM/YYYY", min_value=datetime.date(1900, 1, 1), max_value=datetime.date.today(), value=None)
+
+st.subheader("Dados do(a) Respondente")
+nome_respondente = st.text_input("Nome completo do(a) respondente *")
+vinculo_respondente = st.text_input("Vínculo / Parentesco *")
+
+# ATIVA A MARCA D'ÁGUA
+inject_watermark(nome_crianca, token_url)
+
+st.divider()
 
 with st.form("form_srs2"):
-    st.subheader("Dados do(a) Paciente")
-    nome_crianca = st.text_input("Nome completo do(a) paciente *")
-    data_nasc_crianca = st.date_input("Data de nascimento do(a) paciente *", format="DD/MM/YYYY", min_value=datetime.date(1900, 1, 1), max_value=datetime.date.today(), value=None)
-    
-    st.divider()
-    st.subheader("Dados do(a) Respondente")
-    nome_respondente = st.text_input("Nome completo do(a) respondente *")
-    vinculo_respondente = st.text_input("Vínculo / Parentesco (Ex: Pai, Mãe, Avó) *")
-    st.divider()
-
     respostas_coletadas = {}
     for index, texto_pergunta in enumerate(perguntas):
         num_q = index + 1
@@ -229,29 +242,14 @@ with st.form("form_srs2"):
 
     if st.form_submit_button("Enviar Avaliação"):
         questoes_em_branco = [q for q, r in respostas_coletadas.items() if r is None]
-
         if not nome_crianca or not nome_respondente or not vinculo_respondente or data_nasc_crianca is None:
-            st.error("Por favor, preencha todos os dados de identificação.")
+            st.error("Preencha todos os dados de identificação.")
         elif questoes_em_branco:
-            st.error(f"Por favor, responda todas as perguntas. Faltam {len(questoes_em_branco)} questão(ões).")
+            st.error(f"Responda todas as perguntas. Faltam {len(questoes_em_branco)}.")
         else:
-            dados_paciente = {
-                "nome": nome_crianca,
-                "data_nasc": data_nasc_crianca.strftime("%d/%m/%Y")
-            }
-            dados_respondente = {
-                "nome": nome_respondente,
-                "vinculo": vinculo_respondente
-            }
-
-            with st.spinner('Enviando avaliação...'):
-                if enviar_email_resultados(dados_paciente, dados_respondente, respostas_coletadas, token_url):
-                    try:
-                        planilha.update_cell(linha_alvo, 5, "Respondido")
-                        st.session_state.avaliacao_concluida = True
-                        st.rerun()
-                    except:
-                        st.session_state.avaliacao_concluida = True
-                        st.rerun()
-                else:
-                    st.error("Houve um erro no envio. Tente novamente.")
+            dados_p = {"nome": nome_crianca, "data_nasc": data_nasc_crianca.strftime("%d/%m/%Y")}
+            dados_r = {"nome": nome_respondente, "vinculo": vinculo_respondente}
+            if enviar_email_resultados(dados_p, dados_r, respostas_coletadas, token_url):
+                planilha.update_cell(linha_alvo, 5, "Respondido")
+                st.session_state.avaliacao_concluida = True
+                st.rerun()
