@@ -13,32 +13,40 @@ def inject_watermark(nome_paciente, id_sessao):
     paciente_display = nome_paciente if nome_paciente else "PACIENTE NÃO IDENTIFICADO"
     token_display = id_sessao if id_sessao else "TOKEN"
     
-    # Criamos o desenho da marca d'água em SVG
-    svg = f"""
-    <svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">
-        <g transform="translate(150,150) rotate(-45)">
-            <text text-anchor="middle" fill="rgba(150, 150, 150, 0.18)" font-size="20" font-family="Arial, sans-serif" font-weight="bold">
-                <tspan x="0" dy="-25">INSTRUMENTO SIGILOSO</tspan>
-                <tspan x="0" dy="25">{paciente_display}</tspan>
-                <tspan x="0" dy="25">{token_display}</tspan>
-            </text>
-        </g>
-    </svg>
-    """
+    # Gerando múltiplos blocos para garantir o preenchimento de toda a tela
+    texto_marca = f"INSTRUMENTO SIGILOSO<br>{paciente_display}<br>{token_display}"
+    divs_repetidas = "".join([f"<div class='watermark-text'>{texto_marca}</div>" for _ in range(60)])
     
-    # Transformamos o desenho em uma linha de código Base64
-    b64_svg = base64.b64encode(svg.encode('utf-8')).decode('utf-8')
-    
-    # Aplicamos como Background do contêiner mestre do Streamlit
     watermark_style = f"""
     <style>
-    [data-testid="stAppViewContainer"] {{
-        background-image: url("data:image/svg+xml;base64,{b64_svg}") !important;
-        background-repeat: repeat !important;
-        background-position: center !important;
-        background-attachment: fixed !important;
+    .watermark-wrapper {{
+        position: fixed !important;
+        top: -10% !important;
+        left: -10% !important;
+        width: 120vw !important;
+        height: 120vh !important;
+        z-index: 999999 !important;
+        pointer-events: none !important;
+        display: flex !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        align-content: center !important;
+        overflow: hidden !important;
+    }}
+    .watermark-text {{
+        transform: rotate(-35deg) !important;
+        font-size: 24px !important;
+        font-weight: bold !important;
+        color: rgba(120, 120, 120, 0.15) !important; /* Cor e opacidade forçadas */
+        white-space: nowrap !important;
+        text-align: center !important;
+        padding: 50px !important;
+        user-select: none !important;
     }}
     </style>
+    <div class="watermark-wrapper">
+        {divs_repetidas}
+    </div>
     """
     st.markdown(watermark_style, unsafe_allow_html=True)
 
