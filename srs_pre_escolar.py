@@ -223,7 +223,11 @@ except Exception:
     st.stop()
 
 # ================= INTERFACE =================
+st.markdown(linha_fina, unsafe_allow_html=True)
 st.markdown("<h3 style='text-align: center;'>Escala SRS-2 - Pré-Escolar</h3>", unsafe_allow_html=True)
+st.markdown(linha_fina, unsafe_allow_html=True)
+st.info("**Instrução:** Em cada questão, por favor escolha a alternativa que melhor descreva o comportamento do(a) paciente nos últimos 6 meses.")
+
 
 # IDENTIFICAÇÃO FORA DO FORM (Para a marca d'água funcionar em tempo real)
 st.subheader("Dados do(a) Paciente")
