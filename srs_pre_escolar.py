@@ -223,6 +223,7 @@ except Exception:
     st.stop()
 
 # ================= INTERFACE =================
+linha_fina = "<hr style='border: 1px solid #ccc; margin: 10px 0;'>"
 st.markdown(linha_fina, unsafe_allow_html=True)
 st.markdown("<h3 style='text-align: center;'>Escala SRS-2 - Pré-Escolar</h3>", unsafe_allow_html=True)
 st.markdown(linha_fina, unsafe_allow_html=True)
