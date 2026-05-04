@@ -266,3 +266,9 @@ with st.form("form_srs2"):
                 planilha.update_cell(linha_alvo, 5, "Respondido")
                 st.session_state.avaliacao_concluida = True
                 st.rerun()
+
+
+# --- Keepalive: botão clicado pelo robô de ping para manter o app ativo ---
+with st.sidebar:
+    if st.button("Manter ativo", key="__keepalive__"):
+        pass
